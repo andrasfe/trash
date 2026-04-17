@@ -160,12 +160,18 @@ def _build_skills_raw(state: dict, user_addr: str) -> str:
     return base64.urlsafe_b64encode(em.as_bytes()).decode()
 
 
-def _find_skills_draft(svc, label_id: str):
+def _find_skills_drafts(svc):
+    """Return all drafts whose subject matches our snapshot. Labels may or
+    may not be applied (a prior write could have failed partway)."""
     resp = svc.users().drafts().list(
-        userId="me", q=f"label:{config.SKILLS_LABEL} subject:\"{SKILLS_SUBJECT}\"", maxResults=5,
+        userId="me", q=f'subject:"{SKILLS_SUBJECT}"', maxResults=25,
     ).execute()
-    drafts = resp.get("drafts", [])
-    return drafts[0]["id"] if drafts else None
+    return [d["id"] for d in resp.get("drafts", [])]
+
+
+def _find_skills_draft(svc, label_id: str):
+    ids = _find_skills_drafts(svc)
+    return ids[0] if ids else None
 
 
 def read_skills_snapshot():
@@ -187,9 +193,24 @@ def write_skills_snapshot(state: dict) -> None:
     label_id = ensure_label(config.SKILLS_LABEL)
     user_addr = _user_email(svc)
     raw = _build_skills_raw(state, user_addr)
-    existing_id = _find_skills_draft(svc, label_id)
-    body = {"message": {"raw": raw, "labelIds": [label_id]}}
-    if existing_id:
-        svc.users().drafts().update(userId="me", id=existing_id, body=body).execute()
+
+    existing = _find_skills_drafts(svc)
+    body = {"message": {"raw": raw}}
+    if existing:
+        draft_id = existing[0]
+        result = svc.users().drafts().update(userId="me", id=draft_id, body=body).execute()
+        for dup in existing[1:]:
+            try:
+                svc.users().drafts().delete(userId="me", id=dup).execute()
+            except Exception:
+                pass
     else:
-        svc.users().drafts().create(userId="me", body=body).execute()
+        result = svc.users().drafts().create(userId="me", body=body).execute()
+
+    msg_id = result.get("message", {}).get("id")
+    if msg_id:
+        svc.users().messages().modify(
+            userId="me",
+            id=msg_id,
+            body={"addLabelIds": [label_id]},
+        ).execute()
