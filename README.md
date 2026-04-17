@@ -113,7 +113,7 @@ Key settings:
 | `POLL_INTERVAL_SECONDS` | `600` | sleep between cycles |
 | `TRASH_LOOKBACK_HOURS` | `168` | how far back to look on each cycle |
 | `INBOX_SCAN_LIMIT` | `500` | max inbox messages fetched **per active sender** per cycle (paginated) |
-| `CONFIDENCE_THRESHOLD` | `2` | min count before a rule auto-moves |
+| `CONFIDENCE_THRESHOLD` | `1` | min count before a rule auto-moves (1 = act on first delete; bump to 2+ if you want to require repeated deletions) |
 | `AGENT_TRASH_LABEL` | `agent-trash` | Gmail label for moved mail |
 | `DRY_RUN` | `true` | `false` = actually move |
 

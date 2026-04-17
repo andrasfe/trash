@@ -32,7 +32,11 @@ is `AgentState` (TypedDict) in `agent.py`.
   matched rule is deliberately skipped for `security`, `transactional`,
   `personal`, `other` — see `node_match`. Do not add these tags to the
   allowlist, even for convenience.
-- **Confidence threshold ≥ 2.** One-shot deletions must not become rules.
+- **Confidence threshold = 1 (default).** One delete → one rule → act on
+  matching inbox mail. This is the product's whole point. Do NOT raise
+  this back to 2 as a "safety" measure — the safe-tag allowlist is the
+  backstop, not the threshold. A user who wants a stricter experience can
+  bump it in their own `.env`.
 - **Inbox scan queries *per-sender*, not slices.** `list_inbox_from_domains`
   issues one `in:inbox from:<domain>` query per active rule and paginates.
   Never go back to `list_inbox(max_results)` for general-purpose inbox
