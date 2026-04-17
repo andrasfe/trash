@@ -14,10 +14,14 @@ Every N minutes the agent:
 2. Uses the local model to tag each one with a short topic (from a closed
    vocabulary: `marketing`, `social`, `job-alert`, `news`, `transactional`,
    `security`, `personal`, `other`).
-3. Records a rule of the form `(sender_domain, topic_tag)` with a rolling
-   count in [`rules.json`](./rules.json).
+3. Records a rule of the form `(sender_email, topic_tag)` with a rolling
+   count in [`rules.json`](./rules.json). **Rules key on the full
+   sender address** — `newsletter@brand.com` is a different rule than
+   `someperson@brand.com`. This keeps an individual employee's personal
+   mail from being caught by a rule learned from their company's bulk
+   newsletter.
 4. Once a rule has been confirmed ≥ `CONFIDENCE_THRESHOLD` times, queries
-   Gmail directly with `in:inbox from:<domain>` for each active rule
+   Gmail directly with `in:inbox from:<sender_email>` for each active rule
    (paginating through all matches, up to `INBOX_SCAN_LIMIT` per sender —
    so the entire inbox is covered, not just the most recent slice).
 5. Classifies each candidate with the LLM. If the tag matches an active
@@ -46,7 +50,7 @@ main.py                      # polling loop, signal-safe
  └─ agent.py                  # LangGraph pipeline
      ├─ fetch_trash           # Gmail API: recent trash
      ├─ extract_rules         # LLM classifies each → rules.json
-     ├─ scan_inbox            # Gmail query per active sender (paginated)
+     ├─ scan_inbox            # Gmail query per active sender-email (paginated)
      ├─ match                 # LLM classifies candidates, filter by safe tags
      └─ apply                 # Gmail API: move to agent-trash label
 gmail_client.py               # OAuth + Gmail REST calls

@@ -37,8 +37,15 @@ is `AgentState` (TypedDict) in `agent.py`.
   this back to 2 as a "safety" measure — the safe-tag allowlist is the
   backstop, not the threshold. A user who wants a stricter experience can
   bump it in their own `.env`.
-- **Inbox scan queries *per-sender*, not slices.** `list_inbox_from_domains`
-  issues one `in:inbox from:<domain>` query per active rule and paginates.
+- **Rules key on full sender email, not domain.** A rule is
+  `(sender_email, topic_tag)`, e.g. `newsletter@brand.com :: marketing`.
+  Keying on domain conflated bulk newsletter senders with individual
+  humans at the same company (e.g. `thammer@the1916company.com` was
+  wrongly auto-moved because `noreply@the1916company.com` had been
+  trashed). Do NOT revert to domain keying. If a user needs
+  domain-wide rules they can opt in later; the safe default is strict.
+- **Inbox scan queries *per-sender*, not slices.** `list_inbox_from_senders`
+  issues one `in:inbox from:<email>` query per active rule and paginates.
   Never go back to `list_inbox(max_results)` for general-purpose inbox
   sweeps — that caps aggressively on recency and silently misses matches.
 - **Dry-run default.** `DRY_RUN=true` is the default in `.env.example`.

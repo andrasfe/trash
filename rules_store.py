@@ -24,16 +24,16 @@ def save_rules(state: dict) -> None:
     os.replace(tmp, config.RULES_PATH)
 
 
-def rule_key(sender_domain: str, topic_tag: str) -> str:
-    return f"{sender_domain}::{topic_tag}"
+def rule_key(sender_email: str, topic_tag: str) -> str:
+    return f"{sender_email}::{topic_tag}"
 
 
-def bump_rule(state: dict, sender_domain: str, topic_tag: str, example_subject: str) -> None:
-    key = rule_key(sender_domain, topic_tag)
+def bump_rule(state: dict, sender_email: str, topic_tag: str, example_subject: str) -> None:
+    key = rule_key(sender_email, topic_tag)
     rule = state["rules"].get(key)
     if rule is None:
         rule = {
-            "sender_domain": sender_domain,
+            "sender_email": sender_email,
             "topic_tag": topic_tag,
             "count": 0,
             "first_seen": _now(),

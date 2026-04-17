@@ -104,10 +104,10 @@ def node_extract_rules(state: AgentState) -> AgentState:
     added = 0
     for m in state["trash"]:
         topic = _classify_topic(llm, m)
-        rules_store.bump_rule(store, m["from_domain"], topic, m["subject"])
+        rules_store.bump_rule(store, m["from_email"], topic, m["subject"])
         rules_store.mark_trash_seen(store, m["id"])
         added += 1
-        log.info("learn: %s :: %s (%s)", m["from_domain"], topic, m["subject"][:60])
+        log.info("learn: %s :: %s (%s)", m["from_email"], topic, m["subject"][:60])
     rules_store.save_rules(store)
     return {"store": store, "new_rules_this_run": added}
 
@@ -118,19 +118,19 @@ def node_scan_inbox(state: AgentState) -> AgentState:
     if not active:
         log.info("no active rules yet (threshold=%d)", config.CONFIDENCE_THRESHOLD)
         return {"inbox": [], "candidates": []}
-    active_domains = sorted({r["sender_domain"] for r in active})
-    log.info("scanning inbox for %d active domains: %s", len(active_domains), ", ".join(active_domains))
-    narrowed = gmail_client.list_inbox_from_domains(active_domains, per_domain_cap=config.INBOX_SCAN_LIMIT)
-    log.info("inbox domain-hits=%d active-rules=%d", len(narrowed), len(active))
+    active_senders = sorted({r["sender_email"] for r in active})
+    log.info("scanning inbox for %d active senders: %s", len(active_senders), ", ".join(active_senders))
+    narrowed = gmail_client.list_inbox_from_senders(active_senders, per_sender_cap=config.INBOX_SCAN_LIMIT)
+    log.info("inbox sender-hits=%d active-rules=%d", len(narrowed), len(active))
     return {"inbox": narrowed, "candidates": []}
 
 
 def node_match(state: AgentState) -> AgentState:
     store = state["store"]
     active = rules_store.active_rules(store, config.CONFIDENCE_THRESHOLD)
-    by_domain: dict[str, set[str]] = {}
+    by_sender: dict[str, set[str]] = {}
     for r in active:
-        by_domain.setdefault(r["sender_domain"], set()).add(r["topic_tag"])
+        by_sender.setdefault(r["sender_email"], set()).add(r["topic_tag"])
 
     llm = _llm()
     candidates = []
@@ -139,15 +139,15 @@ def node_match(state: AgentState) -> AgentState:
         if m["id"] in already_moved:
             continue
         topic = _classify_topic(llm, m)
-        if topic in by_domain.get(m["from_domain"], set()):
+        if topic in by_sender.get(m["from_email"], set()):
             if topic not in SAFE_AUTO_MOVE_TAGS:
                 log.info(
                     "skip-unsafe: %s :: %s (%s) — tag not in auto-move set",
-                    m["from_domain"], topic, m["subject"][:60],
+                    m["from_email"], topic, m["subject"][:60],
                 )
                 continue
             candidates.append({**m, "matched_topic": topic})
-            log.info("match: %s :: %s (%s)", m["from_domain"], topic, m["subject"][:60])
+            log.info("match: %s :: %s (%s)", m["from_email"], topic, m["subject"][:60])
     return {"candidates": candidates}
 
 

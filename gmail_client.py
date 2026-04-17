@@ -90,14 +90,14 @@ def list_inbox(max_results: int):
     return [_parse_message(svc, i) for i in ids]
 
 
-def list_inbox_from_domains(domains, per_domain_cap: int = 500):
-    """Return all inbox messages whose sender domain matches any in `domains`.
+def list_inbox_from_senders(senders, per_sender_cap: int = 500):
+    """Return all inbox messages whose sender email matches any in `senders`.
     Paginates through Gmail search; de-dupes by message id."""
     svc = get_service()
     seen_ids: set[str] = set()
     out: list[dict] = []
-    for domain in domains:
-        q = f"in:inbox from:{domain}"
+    for sender in senders:
+        q = f"in:inbox from:{sender}"
         page_token = None
         collected = 0
         while True:
@@ -112,10 +112,10 @@ def list_inbox_from_domains(domains, per_domain_cap: int = 500):
                 seen_ids.add(m["id"])
                 out.append(_parse_message(svc, m["id"]))
                 collected += 1
-                if collected >= per_domain_cap:
+                if collected >= per_sender_cap:
                     break
             page_token = resp.get("nextPageToken")
-            if not page_token or collected >= per_domain_cap:
+            if not page_token or collected >= per_sender_cap:
                 break
     return out
 
