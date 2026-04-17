@@ -81,7 +81,7 @@ def _parse_message(svc, msg_id):
 def list_trash_since(hours: int, max_results: int = 100):
     svc = get_service()
     after = int((datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp())
-    q = f"in:trash after:{after}"
+    q = f'in:trash after:{after} -label:"{config.SKILLS_LABEL}"'
     resp = svc.users().messages().list(userId="me", q=q, maxResults=max_results).execute()
     ids = [m["id"] for m in resp.get("messages", [])]
     return [_parse_message(svc, i) for i in ids]
@@ -152,7 +152,7 @@ def _user_email(svc) -> str:
 
 def _build_skills_raw(state: dict, user_addr: str) -> str:
     em = EmailMessage()
-    em["From"] = user_addr
+    em["From"] = "Trash Agent <skills@trash-agent.local>"
     em["To"] = user_addr
     em["Subject"] = SKILLS_SUBJECT
     em["Date"] = formatdate(localtime=False)
@@ -160,28 +160,31 @@ def _build_skills_raw(state: dict, user_addr: str) -> str:
     return base64.urlsafe_b64encode(em.as_bytes()).decode()
 
 
-def _find_skills_drafts(svc):
-    """Return all drafts whose subject matches our snapshot. Labels may or
-    may not be applied (a prior write could have failed partway)."""
+def _list_skills_messages(svc, label_id: str):
+    """List existing snapshot messages under the skills label (most recent first)."""
+    resp = svc.users().messages().list(
+        userId="me", labelIds=[label_id], maxResults=50,
+    ).execute()
+    return [m["id"] for m in resp.get("messages", [])]
+
+
+def _list_legacy_skills_drafts(svc):
+    """Old scheme stored snapshots as drafts. Find them by subject so we can
+    delete them on first write under the new scheme."""
     resp = svc.users().drafts().list(
         userId="me", q=f'subject:"{SKILLS_SUBJECT}"', maxResults=25,
     ).execute()
     return [d["id"] for d in resp.get("drafts", [])]
 
 
-def _find_skills_draft(svc, label_id: str):
-    ids = _find_skills_drafts(svc)
-    return ids[0] if ids else None
-
-
 def read_skills_snapshot():
     svc = get_service()
     label_id = ensure_label(config.SKILLS_LABEL)
-    draft_id = _find_skills_draft(svc, label_id)
-    if not draft_id:
+    ids = _list_skills_messages(svc, label_id)
+    if not ids:
         return None
-    draft = svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
-    body = _decode_body(draft["message"]["payload"])
+    m = svc.users().messages().get(userId="me", id=ids[0], format="full").execute()
+    body = _decode_body(m["payload"])
     try:
         return json.loads(body)
     except Exception:
@@ -194,23 +197,30 @@ def write_skills_snapshot(state: dict) -> None:
     user_addr = _user_email(svc)
     raw = _build_skills_raw(state, user_addr)
 
-    existing = _find_skills_drafts(svc)
-    body = {"message": {"raw": raw}}
-    if existing:
-        draft_id = existing[0]
-        result = svc.users().drafts().update(userId="me", id=draft_id, body=body).execute()
-        for dup in existing[1:]:
-            try:
-                svc.users().drafts().delete(userId="me", id=dup).execute()
-            except Exception:
-                pass
-    else:
-        result = svc.users().drafts().create(userId="me", body=body).execute()
+    for old_id in _list_skills_messages(svc, label_id):
+        try:
+            svc.users().messages().trash(userId="me", id=old_id).execute()
+        except Exception:
+            pass
 
-    msg_id = result.get("message", {}).get("id")
-    if msg_id:
-        svc.users().messages().modify(
-            userId="me",
-            id=msg_id,
-            body={"addLabelIds": [label_id]},
-        ).execute()
+    for d_id in _list_legacy_skills_drafts(svc):
+        try:
+            svc.users().drafts().delete(userId="me", id=d_id).execute()
+        except Exception:
+            pass
+
+    inserted = svc.users().messages().insert(
+        userId="me",
+        body={"raw": raw, "labelIds": [label_id]},
+    ).execute()
+    for lbl in inserted.get("labelIds", []):
+        if lbl == label_id:
+            continue
+        try:
+            svc.users().messages().modify(
+                userId="me",
+                id=inserted["id"],
+                body={"removeLabelIds": [lbl]},
+            ).execute()
+        except Exception:
+            pass
