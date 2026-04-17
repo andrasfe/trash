@@ -1,6 +1,8 @@
 import base64
+import json
 import os
-from email.utils import parseaddr
+from email.message import EmailMessage
+from email.utils import parseaddr, formatdate
 from datetime import datetime, timedelta, timezone
 
 from google.auth.transport.requests import Request
@@ -9,6 +11,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 import config
+
+SKILLS_SUBJECT = "trash-agent-skills snapshot"
 
 
 def get_service():
@@ -140,3 +144,52 @@ def move_to_label(msg_id: str, label_id: str):
         id=msg_id,
         body={"addLabelIds": [label_id], "removeLabelIds": ["INBOX"]},
     ).execute()
+
+
+def _user_email(svc) -> str:
+    return svc.users().getProfile(userId="me").execute()["emailAddress"]
+
+
+def _build_skills_raw(state: dict, user_addr: str) -> str:
+    em = EmailMessage()
+    em["From"] = user_addr
+    em["To"] = user_addr
+    em["Subject"] = SKILLS_SUBJECT
+    em["Date"] = formatdate(localtime=False)
+    em.set_content(json.dumps(state, indent=2, sort_keys=True))
+    return base64.urlsafe_b64encode(em.as_bytes()).decode()
+
+
+def _find_skills_draft(svc, label_id: str):
+    resp = svc.users().drafts().list(
+        userId="me", q=f"label:{config.SKILLS_LABEL} subject:\"{SKILLS_SUBJECT}\"", maxResults=5,
+    ).execute()
+    drafts = resp.get("drafts", [])
+    return drafts[0]["id"] if drafts else None
+
+
+def read_skills_snapshot():
+    svc = get_service()
+    label_id = ensure_label(config.SKILLS_LABEL)
+    draft_id = _find_skills_draft(svc, label_id)
+    if not draft_id:
+        return None
+    draft = svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+    body = _decode_body(draft["message"]["payload"])
+    try:
+        return json.loads(body)
+    except Exception:
+        return None
+
+
+def write_skills_snapshot(state: dict) -> None:
+    svc = get_service()
+    label_id = ensure_label(config.SKILLS_LABEL)
+    user_addr = _user_email(svc)
+    raw = _build_skills_raw(state, user_addr)
+    existing_id = _find_skills_draft(svc, label_id)
+    body = {"message": {"raw": raw, "labelIds": [label_id]}}
+    if existing_id:
+        svc.users().drafts().update(userId="me", id=existing_id, body=body).execute()
+    else:
+        svc.users().drafts().create(userId="me", body=body).execute()

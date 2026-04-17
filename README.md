@@ -29,6 +29,16 @@ Every N minutes the agent:
    `INBOX` to a label called `agent-trash` (created on first use).
    Nothing is hard-deleted — you can always recover.
 
+### Portable state (skills sync)
+
+The agent's learned state — rules, seen trash ids, moved ids — is mirrored
+to a single continuously-updated **Gmail draft** under a label called
+`trash-agent-skills`. On startup the agent reads that draft; after each
+cycle it writes back. Point a fresh install on another machine at the same
+Gmail account (same OAuth flow) and it picks up the same "skills"
+automatically — no local `rules.json` porting needed. Set
+`SKILLS_SYNC_ENABLED=false` to opt out.
+
 ### Safety rails
 
 - **Dry-run by default.** `DRY_RUN=true` logs what *would* be moved without
@@ -46,15 +56,15 @@ Every N minutes the agent:
 ## Architecture
 
 ```
-main.py                      # polling loop, signal-safe
+main.py                      # polling loop; skills sync on start + after each cycle
  └─ agent.py                  # LangGraph pipeline
      ├─ fetch_trash           # Gmail API: recent trash
      ├─ extract_rules         # LLM classifies each → rules.json
      ├─ scan_inbox            # Gmail query per active sender-email (paginated)
      ├─ match                 # LLM classifies candidates, filter by safe tags
      └─ apply                 # Gmail API: move to agent-trash label
-gmail_client.py               # OAuth + Gmail REST calls
-rules_store.py                # rules.json I/O, confidence counting
+gmail_client.py               # OAuth + Gmail REST + skills draft read/write
+rules_store.py                # rules.json I/O, confidence counting, gmail sync
 config.py                     # env loading
 ```
 
@@ -120,6 +130,8 @@ Key settings:
 | `CONFIDENCE_THRESHOLD` | `1` | min count before a rule auto-moves (1 = act on first delete; bump to 2+ if you want to require repeated deletions) |
 | `AGENT_TRASH_LABEL` | `agent-trash` | Gmail label for moved mail |
 | `DRY_RUN` | `true` | `false` = actually move |
+| `SKILLS_LABEL` | `trash-agent-skills` | Gmail label containing the portable state draft |
+| `SKILLS_SYNC_ENABLED` | `true` | `false` disables pull-on-start / push-after-cycle |
 
 ### 5. Run
 
@@ -146,6 +158,8 @@ tail -f agent.log
 
 # reset state (forces the agent to relearn from trash)
 rm rules.json
+# note: if SKILLS_SYNC_ENABLED=true, the next startup will re-pull from the
+# trash-agent-skills draft. To fully reset, also delete that draft in Gmail.
 ```
 
 Want it stricter? Bump `CONFIDENCE_THRESHOLD` to 3+, or shorten the

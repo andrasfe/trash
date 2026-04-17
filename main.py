@@ -4,6 +4,7 @@ import sys
 import time
 
 import config
+import rules_store
 from agent import run_once
 
 logging.basicConfig(
@@ -25,12 +26,14 @@ def main():
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
     log.info(
-        "starting loop interval=%ss lookback=%sh threshold=%s dry_run=%s",
+        "starting loop interval=%ss lookback=%sh threshold=%s dry_run=%s skills_sync=%s",
         config.POLL_INTERVAL_SECONDS,
         config.TRASH_LOOKBACK_HOURS,
         config.CONFIDENCE_THRESHOLD,
         config.DRY_RUN,
+        config.SKILLS_SYNC_ENABLED,
     )
+    rules_store.sync_from_gmail()
     while not _stop:
         try:
             result = run_once()
@@ -40,6 +43,7 @@ def main():
                 len(result.get("candidates", [])),
                 len(result.get("moved", [])),
             )
+            rules_store.sync_to_gmail(rules_store.load_rules())
         except Exception:
             log.exception("cycle failed")
         for _ in range(config.POLL_INTERVAL_SECONDS):

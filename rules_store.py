@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Optional
 
 import config
+
+log = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -18,10 +21,50 @@ def load_rules() -> dict:
 
 
 def save_rules(state: dict) -> None:
+    state["_updated_at"] = _now()
     tmp = config.RULES_PATH + ".tmp"
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
     os.replace(tmp, config.RULES_PATH)
+
+
+def sync_from_gmail() -> bool:
+    """If the Gmail skills draft is newer than local state, overwrite local.
+    Returns True if local state changed."""
+    if not config.SKILLS_SYNC_ENABLED:
+        return False
+    import gmail_client
+    try:
+        remote = gmail_client.read_skills_snapshot()
+    except Exception:
+        log.exception("skills sync (read) failed — continuing with local state")
+        return False
+    if remote is None:
+        log.info("no remote skills draft found; local state unchanged")
+        return False
+    local = load_rules()
+    r_t = remote.get("_updated_at", "")
+    l_t = local.get("_updated_at", "")
+    if r_t > l_t:
+        tmp = config.RULES_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(remote, f, indent=2)
+        os.replace(tmp, config.RULES_PATH)
+        log.info("pulled skills from gmail (remote=%s > local=%s)", r_t, l_t)
+        return True
+    log.info("local skills newer than gmail (local=%s, remote=%s)", l_t, r_t)
+    return False
+
+
+def sync_to_gmail(state: dict) -> None:
+    if not config.SKILLS_SYNC_ENABLED:
+        return
+    import gmail_client
+    try:
+        gmail_client.write_skills_snapshot(state)
+        log.info("pushed skills to gmail (updated_at=%s)", state.get("_updated_at", ""))
+    except Exception:
+        log.exception("skills sync (write) failed — local state preserved")
 
 
 def rule_key(sender_email: str, topic_tag: str) -> str:

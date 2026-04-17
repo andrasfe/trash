@@ -56,6 +56,15 @@ is `AgentState` (TypedDict) in `agent.py`.
   the agent should NOT move it again — that's the point.
 - **Atomic state writes.** `rules_store.save_rules` writes to a `.tmp`
   file then `os.replace`. Preserve this on any change.
+- **Skills sync via Gmail draft.** The whole `rules.json` content
+  (rules + seen_trash_ids + moved_ids + `_updated_at`) is mirrored to a
+  single continuously-updated Gmail draft labeled
+  `trash-agent-skills`. On startup `sync_from_gmail` pulls if the remote
+  timestamp is newer; after each cycle `sync_to_gmail` pushes. This
+  lets the agent move to a new machine without porting local state —
+  fresh OAuth + same account recovers everything. Do not change the
+  draft storage format lightly; existing snapshots on other machines
+  would become unreadable.
 
 ## Secrets — never commit
 
