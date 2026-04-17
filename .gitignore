@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Secrets — never commit
+.env
+credentials.json
+token.json
+
+# Runtime state
+rules.json
+rules.json.tmp
+agent.log
+nohup.out

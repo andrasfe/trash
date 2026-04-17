@@ -1,0 +1,35 @@
+SETUP
+=====
+
+1. Python env
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+
+2. Gmail OAuth (one-time)
+   - Go to https://console.cloud.google.com/ -> create project -> enable "Gmail API"
+   - Credentials -> Create Credentials -> OAuth client ID -> Application type: Desktop app
+   - Download the JSON, save as ./credentials.json in this folder
+   - Run: python setup_auth.py   (opens browser, writes ./token.json)
+
+3. LM Studio
+   - Launch LM Studio, load a model, start the local server on port 1234
+   - Verify: curl http://127.0.0.1:1234/v1/models
+
+4. Configure
+   cp .env.example .env
+   # Edit .env. Keep DRY_RUN=true for the first few cycles and watch logs.
+   # Set LM_STUDIO_MODEL to match the model id LM Studio reports.
+
+5. Run
+   python main.py
+
+6. Go live
+   - Once you trust what it's doing, set DRY_RUN=false in .env and restart.
+   - To keep it always-on, run under launchd / tmux / systemd-user / nohup.
+
+Notes
+-----
+- State lives in ./rules.json. The agent only acts when a (sender_domain, topic)
+  pair has been seen in trash at least CONFIDENCE_THRESHOLD times (default 2).
+- Matched inbox mail is moved to the "agent-trash" label (created on first move)
+  and removed from INBOX. It's NOT deleted; you can recover from that label.
