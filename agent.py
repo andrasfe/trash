@@ -118,10 +118,10 @@ def node_scan_inbox(state: AgentState) -> AgentState:
     if not active:
         log.info("no active rules yet (threshold=%d)", config.CONFIDENCE_THRESHOLD)
         return {"inbox": [], "candidates": []}
-    inbox = gmail_client.list_inbox(config.INBOX_SCAN_LIMIT)
-    active_domains = {r["sender_domain"] for r in active}
-    narrowed = [m for m in inbox if m["from_domain"] in active_domains]
-    log.info("inbox scanned=%d domain-hits=%d active-rules=%d", len(inbox), len(narrowed), len(active))
+    active_domains = sorted({r["sender_domain"] for r in active})
+    log.info("scanning inbox for %d active domains: %s", len(active_domains), ", ".join(active_domains))
+    narrowed = gmail_client.list_inbox_from_domains(active_domains, per_domain_cap=config.INBOX_SCAN_LIMIT)
+    log.info("inbox domain-hits=%d active-rules=%d", len(narrowed), len(active))
     return {"inbox": narrowed, "candidates": []}
 
 

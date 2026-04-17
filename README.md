@@ -16,11 +16,14 @@ Every N minutes the agent:
    `security`, `personal`, `other`).
 3. Records a rule of the form `(sender_domain, topic_tag)` with a rolling
    count in [`rules.json`](./rules.json).
-4. Once a rule has been confirmed ≥ `CONFIDENCE_THRESHOLD` times, scans your
-   inbox for senders matching that rule, classifies each hit, and if the
-   topic also matches:
-5. Moves the message from `INBOX` to a label called `agent-trash`
-   (created on first use). Nothing is hard-deleted — you can always recover.
+4. Once a rule has been confirmed ≥ `CONFIDENCE_THRESHOLD` times, queries
+   Gmail directly with `in:inbox from:<domain>` for each active rule
+   (paginating through all matches, up to `INBOX_SCAN_LIMIT` per sender —
+   so the entire inbox is covered, not just the most recent slice).
+5. Classifies each candidate with the LLM. If the tag matches an active
+   rule *and* is in the safe-move allowlist, moves the message from
+   `INBOX` to a label called `agent-trash` (created on first use).
+   Nothing is hard-deleted — you can always recover.
 
 ### Safety rails
 
@@ -43,7 +46,7 @@ main.py                      # polling loop, signal-safe
  └─ agent.py                  # LangGraph pipeline
      ├─ fetch_trash           # Gmail API: recent trash
      ├─ extract_rules         # LLM classifies each → rules.json
-     ├─ scan_inbox            # narrow inbox to active-rule domains
+     ├─ scan_inbox            # Gmail query per active sender (paginated)
      ├─ match                 # LLM classifies candidates, filter by safe tags
      └─ apply                 # Gmail API: move to agent-trash label
 gmail_client.py               # OAuth + Gmail REST calls
@@ -109,7 +112,7 @@ Key settings:
 | `LM_STUDIO_MODEL` | `local-model` | must match the id LM Studio reports |
 | `POLL_INTERVAL_SECONDS` | `600` | sleep between cycles |
 | `TRASH_LOOKBACK_HOURS` | `168` | how far back to look on each cycle |
-| `INBOX_SCAN_LIMIT` | `50` | max inbox messages fetched per cycle |
+| `INBOX_SCAN_LIMIT` | `500` | max inbox messages fetched **per active sender** per cycle (paginated) |
 | `CONFIDENCE_THRESHOLD` | `2` | min count before a rule auto-moves |
 | `AGENT_TRASH_LABEL` | `agent-trash` | Gmail label for moved mail |
 | `DRY_RUN` | `true` | `false` = actually move |

@@ -90,6 +90,36 @@ def list_inbox(max_results: int):
     return [_parse_message(svc, i) for i in ids]
 
 
+def list_inbox_from_domains(domains, per_domain_cap: int = 500):
+    """Return all inbox messages whose sender domain matches any in `domains`.
+    Paginates through Gmail search; de-dupes by message id."""
+    svc = get_service()
+    seen_ids: set[str] = set()
+    out: list[dict] = []
+    for domain in domains:
+        q = f"in:inbox from:{domain}"
+        page_token = None
+        collected = 0
+        while True:
+            params = {"userId": "me", "q": q, "maxResults": 100}
+            if page_token:
+                params["pageToken"] = page_token
+            resp = svc.users().messages().list(**params).execute()
+            msgs = resp.get("messages", [])
+            for m in msgs:
+                if m["id"] in seen_ids:
+                    continue
+                seen_ids.add(m["id"])
+                out.append(_parse_message(svc, m["id"]))
+                collected += 1
+                if collected >= per_domain_cap:
+                    break
+            page_token = resp.get("nextPageToken")
+            if not page_token or collected >= per_domain_cap:
+                break
+    return out
+
+
 def ensure_label(name: str) -> str:
     svc = get_service()
     labels = svc.users().labels().list(userId="me").execute().get("labels", [])
