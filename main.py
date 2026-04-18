@@ -37,13 +37,20 @@ def main():
     while not _stop:
         try:
             result = run_once()
+            learned = result.get("new_rules_this_run", 0)
+            moved = len(result.get("moved", []))
+            skipped = result.get("skipped_this_run", 0)
             log.info(
-                "cycle done: learned=%d candidates=%d moved=%d",
-                result.get("new_rules_this_run", 0),
+                "cycle done: learned=%d candidates=%d moved=%d skipped=%d",
+                learned,
                 len(result.get("candidates", [])),
-                len(result.get("moved", [])),
+                moved,
+                skipped,
             )
-            rules_store.sync_to_gmail(rules_store.load_rules())
+            if learned or moved or skipped:
+                rules_store.sync_to_gmail(rules_store.load_rules())
+            else:
+                log.info("no state change; skipping gmail sync")
         except Exception:
             log.exception("cycle failed")
         for _ in range(config.POLL_INTERVAL_SECONDS):

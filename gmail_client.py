@@ -199,7 +199,11 @@ def write_skills_snapshot(state: dict) -> None:
 
     for old_id in _list_skills_messages(svc, label_id):
         try:
-            svc.users().messages().trash(userId="me", id=old_id).execute()
+            svc.users().messages().modify(
+                userId="me",
+                id=old_id,
+                body={"removeLabelIds": [label_id]},
+            ).execute()
         except Exception:
             pass
 

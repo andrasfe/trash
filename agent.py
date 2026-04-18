@@ -136,6 +136,7 @@ def node_match(state: AgentState) -> AgentState:
     candidates = []
     already_moved = set(store["moved_ids"])
     already_skipped = set(store["skipped_ids"])
+    skipped_this_run = 0
     for m in state["inbox"]:
         if m["id"] in already_moved or m["id"] in already_skipped:
             continue
@@ -147,11 +148,12 @@ def node_match(state: AgentState) -> AgentState:
                     m["from_email"], topic, m["subject"][:60],
                 )
                 rules_store.mark_skipped(store, m["id"])
+                skipped_this_run += 1
                 continue
             candidates.append({**m, "matched_topic": topic})
             log.info("match: %s :: %s (%s)", m["from_email"], topic, m["subject"][:60])
     rules_store.save_rules(store)
-    return {"candidates": candidates}
+    return {"candidates": candidates, "skipped_this_run": skipped_this_run}
 
 
 def node_apply(state: AgentState) -> AgentState:
