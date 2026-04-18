@@ -135,8 +135,9 @@ def node_match(state: AgentState) -> AgentState:
     llm = _llm()
     candidates = []
     already_moved = set(store["moved_ids"])
+    already_skipped = set(store["skipped_ids"])
     for m in state["inbox"]:
-        if m["id"] in already_moved:
+        if m["id"] in already_moved or m["id"] in already_skipped:
             continue
         topic = _classify_topic(llm, m)
         if topic in by_sender.get(m["from_email"], set()):
@@ -145,9 +146,11 @@ def node_match(state: AgentState) -> AgentState:
                     "skip-unsafe: %s :: %s (%s) — tag not in auto-move set",
                     m["from_email"], topic, m["subject"][:60],
                 )
+                rules_store.mark_skipped(store, m["id"])
                 continue
             candidates.append({**m, "matched_topic": topic})
             log.info("match: %s :: %s (%s)", m["from_email"], topic, m["subject"][:60])
+    rules_store.save_rules(store)
     return {"candidates": candidates}
 
 

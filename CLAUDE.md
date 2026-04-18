@@ -54,6 +54,12 @@ is `AgentState` (TypedDict) in `agent.py`.
 - **Idempotence.** `moved_ids` in `rules.json` prevents re-processing a
   message. Don't remove this. If a user moves a message back to INBOX,
   the agent should NOT move it again — that's the point.
+- **Skipped-cache.** `skipped_ids` remembers messages that matched a rule
+  but were blocked by the safe-tag filter. Without it, every cycle
+  re-classifies the same backlog (e.g. years of Google security alerts)
+  only to skip them again — thousands of wasted LLM calls. If a user
+  edits `SAFE_AUTO_MOVE_TAGS`, `skipped_ids` may need to be cleared so
+  newly-safe tags get re-evaluated.
 - **Atomic state writes.** `rules_store.save_rules` writes to a `.tmp`
   file then `os.replace`. Preserve this on any change.
 - **Skills sync via Gmail draft.** The whole `rules.json` content

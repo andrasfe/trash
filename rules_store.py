@@ -15,9 +15,11 @@ def _now() -> str:
 
 def load_rules() -> dict:
     if not os.path.exists(config.RULES_PATH):
-        return {"rules": {}, "seen_trash_ids": [], "moved_ids": []}
+        return {"rules": {}, "seen_trash_ids": [], "moved_ids": [], "skipped_ids": []}
     with open(config.RULES_PATH) as f:
-        return json.load(f)
+        state = json.load(f)
+    state.setdefault("skipped_ids", [])
+    return state
 
 
 def save_rules(state: dict) -> None:
@@ -103,3 +105,9 @@ def mark_trash_seen(state: dict, msg_id: str) -> bool:
 
 def mark_moved(state: dict, msg_id: str) -> None:
     state["moved_ids"] = (state["moved_ids"] + [msg_id])[-5000:]
+
+
+def mark_skipped(state: dict, msg_id: str) -> None:
+    if msg_id in state["skipped_ids"]:
+        return
+    state["skipped_ids"] = (state["skipped_ids"] + [msg_id])[-10000:]
